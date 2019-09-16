@@ -137,16 +137,10 @@ busGlobals.CacheBus.run()
 memory = mainMemory.MainMemory()
 memory.run()
 
-mem1 = ['1-s-7-1', '1-l-8', '1-l-12', '1-l-3', '1-l-5', '1-l-15', '1-l-2', '1-l-1' ]
-mem = ['0-l-4', '0-l-9', '0-l-14', '0-s-8-0', '0-l-7', '0-l-13', '0-s-0-0', '0-l-13', '0-l-9', '0-l-1', '0-l-3', '0-l-2']
-
 proc1 = processor.Processor(0)
-
-proc1.instructionsMemory.memory = mem
 proc1.run()
 proc2 = processor.Processor(1)
 proc2.run()
-proc2.instructionsMemory.memory = mem1
 proc3 = processor.Processor(2)
 proc3.run()
 proc4 = processor.Processor(3)
