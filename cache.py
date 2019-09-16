@@ -79,7 +79,6 @@ class CacheMemory:
                 
                 if modifyIfExists == True: #If value exists in M state -> Write back
 
-                    settings.HighEvent.wait()
                     instruction = str(self.processorId) + settings.INSTRUCTION_SEPARATOR + settings.STORE_INSTRUCTION_TYPE + settings.INSTRUCTION_SEPARATOR + str(address) + settings.INSTRUCTION_SEPARATOR + str(self.processorId)
 
                     settings.MainBusMutex.acquire() #Send to main bus
@@ -103,8 +102,6 @@ class CacheMemory:
         else:# Miss -> Return none and write back if necesary
             
             if modifyIfNotExists == True and self.memory[position][self.VALID_BIT] == 'M': #Write back position will be used
-
-                settings.HighEvent.wait()
 
                 settings.GuiMutex.acquire() # -> Waiting to gui
                 settings.GuiQueue.put(settings.PROCESSOR_STATE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) + settings.GUI_INSTRUCTION_SEPARATOR + "Waiting write back")
