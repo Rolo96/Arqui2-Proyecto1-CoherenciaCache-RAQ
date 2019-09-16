@@ -14,6 +14,7 @@ This file contains the cache and cache controller component implementation
 import settings
 import threading
 import busGlobals
+from time import sleep
 
 #-------------------------CacheMemory --------------------------------
 class CacheMemory:
@@ -37,6 +38,8 @@ class CacheMemory:
         self.memorySize = settings.CACHE_MEMORY_SIZE
         self.delay = settings.CACHE_DELAY
         self.memory = []
+        self.writeBack = None
+        self.writeBackGui = None
         
         EmptyValue =	{
           self.VALID_BIT: 'I',
@@ -48,7 +51,7 @@ class CacheMemory:
             self.memory.append(EmptyValue.copy())
             
     #------------------Methods-----------------------
-    def isInCache(self, address, modifyIfExists, modifyIfNotExists ):
+    def isInCache(self, address, modifyIfExists, modifyIfNotExists):
         """
         Find data in cache
         
@@ -77,23 +80,11 @@ class CacheMemory:
             
             elif self.memory[position][self.VALID_BIT] == 'M': #Hit -> Is in cache but modified -> return the value and if is necesary write back
                 
-                if modifyIfExists == True: #If value exists in M state -> Write back
+                if modifyIfExists == True: #If value exists in M state -> active write back
 
-                    instruction = str(self.processorId) + settings.INSTRUCTION_SEPARATOR + settings.STORE_INSTRUCTION_TYPE + settings.INSTRUCTION_SEPARATOR + str(address) + settings.INSTRUCTION_SEPARATOR + str(self.processorId)
-
-                    settings.MainBusMutex.acquire() #Send to main bus
-                    busGlobals.MainBus.requests.insert(0,instruction)
-                    settings.MainBusMutex.release()
-
+                    self.writeBack = str(self.processorId) + settings.INSTRUCTION_SEPARATOR + settings.STORE_INSTRUCTION_TYPE + settings.INSTRUCTION_SEPARATOR + str(address) + settings.INSTRUCTION_SEPARATOR + str(self.processorId)
                     self.memory[position][self.VALID_BIT] == 'S'
-                    instructionToGui = "S-" + str(address) + "-" + str(self.memory[position][self.VALUE])
-
-                    settings.GuiMutex.acquire() #GUI draw
-                    settings.GuiQueue.put(settings.BUS_REQUEST_NOW_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + instruction)
-                    settings.GuiQueue.put(settings.CACHE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) +
-                                          settings.GUI_INSTRUCTION_SEPARATOR + str(address) + settings.GUI_INSTRUCTION_SEPARATOR +
-                                          instructionToGui)
-                    settings.GuiMutex.release()
+                    self.writeBackGui = "S-" + str(address) + "-" + str(self.memory[position][self.VALUE])
                 return self.memory[position][self.VALUE]
             
             else: #Miss -> Is in cache but invalid -> return none
@@ -103,6 +94,8 @@ class CacheMemory:
             
             if modifyIfNotExists == True and self.memory[position][self.VALID_BIT] == 'M': #Write back position will be used
 
+                settings.HighEvent.wait()
+                sleep(0.1*settings.SYSTEM_DELAY)
                 settings.GuiMutex.acquire() # -> Waiting to gui
                 settings.GuiQueue.put(settings.PROCESSOR_STATE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) + settings.GUI_INSTRUCTION_SEPARATOR + "Waiting write back")
                 settings.GuiMutex.release()
@@ -212,12 +205,27 @@ class CacheController:
                 if instructionSplitted[1] == settings.LOAD_INSTRUCTION_TYPE: #Read instruction -> If have the value answer
                     if (value != None): #I have the value -> If I am first -> Write to bus and gui
                         settings.CacheBusMutex.acquire()
-                        if (len(busGlobals.CacheBus.bus.data.split(settings.INSTRUCTION_SEPARATOR)) < 4):#Not answered -> answer
+                        if (len(busGlobals.CacheBus.bus.data.split(settings.INSTRUCTION_SEPARATOR)) < 4):#Not answered -> answer ->Write back if necesary
                             newData = actualBusData + settings.INSTRUCTION_SEPARATOR + str(value)
                             busGlobals.CacheBus.bus.data = newData
                             settings.GuiMutex.acquire()
                             settings.GuiQueue.put(settings.CACHE_BUS_SIMPLE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + newData)
                             settings.GuiMutex.release()
+
+                            if self.cacheMemory.writeBack !=None: #->Write back
+                                sleep(0.1*settings.SYSTEM_DELAY)
+                                settings.MainBusMutex.acquire() #Send to main bus
+                                busGlobals.MainBus.requests.insert(0,self.cacheMemory.writeBack)
+                                settings.MainBusMutex.release()
+
+                                
+
+                                settings.GuiMutex.acquire() #GUI draw
+                                settings.GuiQueue.put(settings.BUS_REQUEST_NOW_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + self.cacheMemory.writeBack)
+                                settings.GuiQueue.put(settings.CACHE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) +
+                                                      settings.GUI_INSTRUCTION_SEPARATOR + str(instructionSplitted[2]) + settings.GUI_INSTRUCTION_SEPARATOR +
+                                                      self.cacheMemory.writeBackGui)
+                                settings.GuiMutex.release()
                         settings.CacheBusMutex.release()           
                         value = None
                 
@@ -231,6 +239,7 @@ class CacheController:
                 if instructionSplitted[0] != str(self.processorId):# Not me -> read
                     
                     if instructionSplitted[1] == settings.LOAD_INSTRUCTION_TYPE and len(instructionSplitted)<4: #Read and not aswered -> Find the value -> If exists send to memory
+                        self.cacheMemory.writeBack = None
                         value = self.cacheMemory.isInCache(int(instructionSplitted[2]), True, False)
                         
                     elif instructionSplitted[1] == settings.STORE_INSTRUCTION_TYPE: #Write -> Invalid

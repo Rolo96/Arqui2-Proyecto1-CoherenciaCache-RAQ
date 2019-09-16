@@ -167,6 +167,7 @@ class Processor:
             settings.GuiMutex.release()
         
         #----------Send invalid to caches------------
+        sleep(0.1*settings.SYSTEM_DELAY)
         settings.CacheBusMutex.acquire()
         busGlobals.CacheBus.requests.insert(0,instruction)
         settings.CacheBusMutex.release()
@@ -220,7 +221,6 @@ class Processor:
 
         #--------------Write time--------------------
         settings.HighEvent.wait()
-        
         if value == None: #Not in cache -> Miss to gui
             settings.GuiMutex.acquire()
             settings.GuiQueue.put(settings.PROCESSOR_STATUS_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) + settings.GUI_INSTRUCTION_SEPARATOR + "Cache miss")
@@ -253,7 +253,7 @@ class Processor:
                     settings.GuiMutex.acquire() # -> Read to gui
                     settings.GuiQueue.put(settings.PROCESSOR_STATE_GUI_INSTRUCTION_TYPE + settings.GUI_INSTRUCTION_SEPARATOR + str(self.processorId) + settings.GUI_INSTRUCTION_SEPARATOR + "Read from another cache")
                     settings.GuiMutex.release()
-
+                
                     value = actualCacheBusData.split(settings.INSTRUCTION_SEPARATOR)[3]
                     self.cacheController.cacheMemory.insert_data(memoryPosition, int(value), 'S')
                     instructionToGui = "S-" + instructionSplitted[2] + "-" + value
@@ -269,10 +269,8 @@ class Processor:
                 if busCicles >= settings.CACHE_BUS_DELAY: #Was in bus but anyone respond -> Continue
                     break;
                 count = count + 1
-
             #--------------Write time----------------
             settings.HighEvent.wait()
-
             #------------Get from memory-------------
             if value == None: # Not in another cache -> Get from memory -> Send to memory bus and gui
 
